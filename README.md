@@ -22,6 +22,8 @@ http://localhost:3000
 http://192.168.1.20:3000
 ```
 
+注意：局域网 IP 的 HTTP 地址可以打开页面，但浏览器通常不会允许屏幕共享。真正投屏需要 HTTPS，只有 `localhost` / `127.0.0.1` 是开发例外。
+
 ## 部署到另一台本地服务器
 
 1. 在服务器安装 Node.js 20 或更高版本。
@@ -29,6 +31,28 @@ http://192.168.1.20:3000
 3. 在项目目录执行 `npm start`。
 4. 在服务器防火墙放行 TCP `3000` 端口。
 5. 局域网内其他设备访问 `http://服务器IP:3000`。
+
+这个地址适合验证页面和房间功能。如果要点击“开始投屏”，请给服务配置 HTTPS 后访问 `https://...`。
+
+## HTTPS 要求
+
+浏览器的屏幕共享 API `navigator.mediaDevices.getDisplayMedia()` 只在安全上下文可用：
+
+- `https://域名`
+- `http://localhost`
+- `http://127.0.0.1`
+
+如果使用 `http://192.168.x.x:3000` 这类局域网地址，页面可能能打开，但点击“开始投屏”会失败，常见报错是：
+
+```text
+Cannot read properties of undefined (reading 'getDisplayMedia')
+```
+
+解决方式：
+
+- 正式使用：给服务配置域名和 HTTPS，推荐用 Caddy 或 Nginx 反向代理到 `http://127.0.0.1:3000`。
+- 局域网测试：可以使用自签名证书或 mkcert，但每台访问设备都需要信任证书。
+- 临时调试：浏览器 flags 可以把某个 HTTP 来源临时视为安全来源，但不建议正式使用。
 
 ## 功能
 
