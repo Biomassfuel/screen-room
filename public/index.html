@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>投屏房间</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v7c0 1.38-1.12 2.5-2.5 2.5h-11A2.5 2.5 0 0 1 4 13.5v-7Z" />
+              <path d="M9 20h6M12 16v4" />
+            </svg>
+          </span>
+          <div>
+            <h1>投屏房间</h1>
+            <p>开房间，输入密码观看实时屏幕</p>
+          </div>
+        </div>
+        <div class="topbar-status">
+          <span class="status-dot" id="serverDot"></span>
+          <span id="serverStatus">本地服务连接中</span>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="投屏工作台">
+        <aside class="panel panel-host">
+          <div class="panel-heading">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v8c0 1.38-1.12 2.5-2.5 2.5h-11A2.5 2.5 0 0 1 4 14.5v-8Z" />
+                <path d="m9 10 2 2 4-4" />
+              </svg>
+            </span>
+            <div>
+              <h2>开房间</h2>
+              <p>房主创建房间后，点击开始投屏。</p>
+            </div>
+          </div>
+
+          <form id="createRoomForm" class="form-stack">
+            <label>
+              <span>房间名称</span>
+              <input id="roomNameInput" type="text" maxlength="40" placeholder="例如：会议投屏" autocomplete="off" />
+            </label>
+            <label>
+              <span>房间密码</span>
+              <input id="hostPasswordInput" type="password" minlength="4" placeholder="至少 4 位" autocomplete="new-password" required />
+            </label>
+            <button class="primary-btn" id="createRoomBtn" type="submit">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              创建房间
+            </button>
+          </form>
+
+          <div class="room-card" id="hostRoomCard" hidden>
+            <div>
+              <span class="meta-label">房间号</span>
+              <strong id="hostRoomId">------</strong>
+            </div>
+            <button class="ghost-icon" id="copyRoomBtn" type="button" title="复制房间号" aria-label="复制房间号">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="8" y="8" width="10" height="10" rx="2" />
+                <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="host-actions">
+            <button class="accent-btn" id="startShareBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16v11H4z" />
+                <path d="M8 21h8M12 16v5M12 8v5M9.5 10.5 12 8l2.5 2.5" />
+              </svg>
+              开始投屏
+            </button>
+            <button class="danger-btn" id="stopShareBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="1.5" />
+              </svg>
+              停止
+            </button>
+          </div>
+
+          <dl class="stats-grid">
+            <div>
+              <dt>观看人数</dt>
+              <dd id="viewerCount">0</dd>
+            </div>
+            <div>
+              <dt>投屏状态</dt>
+              <dd id="shareStatus">未开始</dd>
+            </div>
+          </dl>
+
+          <div class="preview-shell">
+            <video id="localPreview" muted playsinline></video>
+            <div class="video-empty" id="localPreviewEmpty">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 7h18v10H3z" />
+                <path d="m8 12 3 3 5-6" />
+              </svg>
+              <span>本机预览会显示在这里</span>
+            </div>
+          </div>
+        </aside>
+
+        <section class="panel panel-viewer">
+          <div class="panel-heading">
+            <span class="panel-icon panel-icon-alt" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M6 19h12M9 16v3M15 16v3M4 5h16v11H4z" />
+                <path d="M10 9h4M10 12h4" />
+              </svg>
+            </span>
+            <div>
+              <h2>加入观看</h2>
+              <p>输入房间号和密码，即可观看房主屏幕。</p>
+            </div>
+          </div>
+
+          <form id="joinRoomForm" class="join-grid">
+            <label>
+              <span>房间号</span>
+              <input id="joinRoomIdInput" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6 位数字" autocomplete="off" required />
+            </label>
+            <label>
+              <span>密码</span>
+              <input id="viewerPasswordInput" type="password" minlength="4" placeholder="房间密码" autocomplete="current-password" required />
+            </label>
+            <button class="primary-btn" id="joinRoomBtn" type="submit">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <path d="m10 17 5-5-5-5M15 12H3" />
+              </svg>
+              加入
+            </button>
+          </form>
+
+          <div class="viewer-meta">
+            <div>
+              <span class="meta-label">当前房间</span>
+              <strong id="viewerRoomName">尚未加入</strong>
+            </div>
+            <button class="secondary-btn" id="leaveRoomBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5M21 12H9" />
+              </svg>
+              离开
+            </button>
+          </div>
+
+          <div class="screen-stage">
+            <video id="remoteVideo" playsinline autoplay controls></video>
+            <div class="video-empty stage-empty" id="remoteEmpty">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16v11H4z" />
+                <path d="M8 21h8M12 16v5" />
+              </svg>
+              <span id="remoteEmptyText">等待加入房间</span>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="activity-bar" aria-live="polite">
+        <div>
+          <span class="meta-label">系统消息</span>
+          <p id="messageLine">准备就绪。建议在同一局域网内访问，正式部署需启用 HTTPS。</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
