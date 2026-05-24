@@ -5,9 +5,9 @@
   "description": "A local WebRTC screen-casting room MVP with password-protected rooms.",
   "type": "module",
   "scripts": {
-  "start": "PORT=3001 node server.js",
-  "dev": "node server.js"
-},
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
   "engines": {
     "node": ">=20"
   }

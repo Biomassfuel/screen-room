@@ -28,10 +28,17 @@ const elements = {
   remoteEmptyText: $("#remoteEmptyText")
 };
 
-const iceServers = [
+const fallbackIceServers = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" }
 ];
+
+const rtcConfig = {
+  iceServers: fallbackIceServers,
+  iceTransportPolicy: "all",
+  turnEnabled: false
+};
+let clientConfigPromise = null;
 
 const state = {
   host: {
@@ -62,6 +69,29 @@ function setServerStatus(status, online) {
   elements.serverStatus.textContent = status;
   elements.serverDot.classList.toggle("online", online === true);
   elements.serverDot.classList.toggle("offline", online === false);
+}
+
+async function loadClientConfig() {
+  try {
+    const config = await api("/api/config");
+    rtcConfig.iceServers = Array.isArray(config.iceServers) && config.iceServers.length
+      ? config.iceServers
+      : fallbackIceServers;
+    rtcConfig.iceTransportPolicy = config.iceTransportPolicy === "relay" ? "relay" : "all";
+    rtcConfig.turnEnabled = Boolean(config.turnEnabled);
+  } catch {
+    rtcConfig.iceServers = fallbackIceServers;
+    rtcConfig.iceTransportPolicy = "all";
+    rtcConfig.turnEnabled = false;
+    setMessage("无法读取连接配置，已使用默认 STUN。", "error");
+  }
+}
+
+function ensureClientConfig() {
+  if (!clientConfigPromise) {
+    clientConfigPromise = loadClientConfig();
+  }
+  return clientConfigPromise;
 }
 
 async function api(path, options = {}) {
@@ -105,10 +135,18 @@ async function setSharingStatus(sharing) {
 }
 
 function createPeerConnection() {
-  const peer = new RTCPeerConnection({ iceServers });
+  const peer = new RTCPeerConnection({
+    iceServers: rtcConfig.iceServers,
+    iceTransportPolicy: rtcConfig.iceTransportPolicy
+  });
   peer.onconnectionstatechange = () => {
     if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
       setMessage(`连接状态：${peer.connectionState}`);
+    }
+  };
+  peer.oniceconnectionstatechange = () => {
+    if (peer.iceConnectionState === "failed" && !rtcConfig.turnEnabled) {
+      setMessage("直连失败：当前没有启用 TURN，中继服务可以提升复杂网络下的连通率。", "error");
     }
   };
   return peer;
@@ -134,6 +172,7 @@ async function connectViewerFromHost(viewerId) {
   state.host.knownViewers.add(viewerId);
   if (!state.host.stream || state.host.peers.has(viewerId)) return;
 
+  await ensureClientConfig();
   const peer = createPeerConnection();
   state.host.peers.set(viewerId, peer);
   state.host.stream.getTracks().forEach((track) => peer.addTrack(track, state.host.stream));
@@ -289,6 +328,7 @@ async function stopSharing() {
 async function createViewerPeer() {
   if (state.viewer.peer) state.viewer.peer.close();
 
+  await ensureClientConfig();
   const peer = createPeerConnection();
   state.viewer.peer = peer;
 
@@ -449,3 +489,4 @@ window.addEventListener("beforeunload", () => {
 toggleVideoEmpty(elements.localPreview, elements.localPreviewEmpty, true);
 toggleVideoEmpty(elements.remoteVideo, elements.remoteEmpty, true);
 healthCheck();
+ensureClientConfig();

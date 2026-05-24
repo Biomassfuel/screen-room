@@ -12,6 +12,11 @@ const httpsKeyFile = process.env.HTTPS_KEY_FILE;
 const httpsCertFile = process.env.HTTPS_CERT_FILE;
 const useHttps = Boolean(httpsKeyFile && httpsCertFile);
 const port = Number(process.env.PORT || (useHttps ? 443 : 3000));
+const defaultIceServers = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:global.stun.twilio.com:3478" }
+];
+const iceTransportPolicy = process.env.ICE_TRANSPORT_POLICY === "relay" ? "relay" : "all";
 
 const rooms = new Map();
 let messageId = 1;
@@ -30,6 +35,59 @@ const createToken = () => randomBytes(24).toString("base64url");
 const createRoomId = () => String(Math.floor(100000 + Math.random() * 900000));
 const hashPassword = (password, salt) =>
   createHash("sha256").update(`${salt}:${password}`).digest("hex");
+
+function parseCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeIceServer(server) {
+  if (!server || typeof server !== "object" || Array.isArray(server)) {
+    throw new Error("ICE server config entries must be objects.");
+  }
+
+  const urls = Array.isArray(server.urls)
+    ? server.urls.map((url) => String(url).trim()).filter(Boolean)
+    : String(server.urls || "").trim();
+
+  if (!urls || (Array.isArray(urls) && urls.length === 0)) {
+    throw new Error("ICE server config entries require urls.");
+  }
+
+  const normalized = { urls };
+  for (const key of ["username", "credential", "credentialType"]) {
+    if (server[key]) normalized[key] = String(server[key]);
+  }
+  return normalized;
+}
+
+function buildIceServers() {
+  const jsonConfig = process.env.ICE_SERVERS_JSON?.trim();
+  if (jsonConfig) {
+    const parsed = JSON.parse(jsonConfig);
+    if (!Array.isArray(parsed)) {
+      throw new Error("ICE_SERVERS_JSON must be a JSON array.");
+    }
+    return parsed.map(normalizeIceServer);
+  }
+
+  const iceServers = [...defaultIceServers];
+  const turnUrls = parseCsv(process.env.TURN_URLS);
+  if (turnUrls.length) {
+    const turnServer = { urls: turnUrls };
+    if (process.env.TURN_USERNAME) turnServer.username = process.env.TURN_USERNAME;
+    if (process.env.TURN_CREDENTIAL) turnServer.credential = process.env.TURN_CREDENTIAL;
+    if (process.env.TURN_CREDENTIAL_TYPE) {
+      turnServer.credentialType = process.env.TURN_CREDENTIAL_TYPE;
+    }
+    iceServers.push(normalizeIceServer(turnServer));
+  }
+  return iceServers;
+}
+
+const iceServers = buildIceServers();
 
 function passwordsMatch(room, password) {
   const incoming = Buffer.from(hashPassword(password, room.salt), "hex");
@@ -127,6 +185,18 @@ function waitForEvents(queue, cursor, timeout = 25000) {
 }
 
 async function handleApi(req, res, pathname, searchParams) {
+  if (req.method === "GET" && pathname === "/api/config") {
+    sendJson(res, 200, {
+      iceServers,
+      iceTransportPolicy,
+      turnEnabled: iceServers.some((server) => {
+        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+        return urls.some((url) => String(url).startsWith("turn:") || String(url).startsWith("turns:"));
+      })
+    });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/api/rooms") {
     const body = await readBody(req);
     const password = String(body.password || "").trim();
@@ -352,4 +422,8 @@ const server = useHttps
 server.listen(port, "0.0.0.0", () => {
   const protocol = useHttps ? "https" : "http";
   console.log(`Screen Room is running at ${protocol}://localhost:${port}`);
+  console.log(`ICE servers configured: ${iceServers.length}; TURN enabled: ${iceServers.some((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return urls.some((url) => String(url).startsWith("turn:") || String(url).startsWith("turns:"));
+  })}`);
 });
