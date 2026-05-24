@@ -54,6 +54,51 @@ Cannot read properties of undefined (reading 'getDisplayMedia')
 - 局域网测试：可以使用自签名证书或 mkcert，但每台访问设备都需要信任证书。
 - 临时调试：浏览器 flags 可以把某个 HTTP 来源临时视为安全来源，但不建议正式使用。
 
+## TURN 配置
+
+项目默认会给浏览器下发两个公共 STUN 服务。如果两端网络无法直连，可以配置 TURN，让 WebRTC 在直连失败时走中继。
+
+注意：这里是“接入 TURN 使用能力”，TURN 服务器本身需要单独部署或购买第三方服务，例如 coturn。
+
+PowerShell 示例：
+
+```powershell
+$env:TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349"
+$env:TURN_USERNAME="screen-room"
+$env:TURN_CREDENTIAL="your-turn-password"
+node server.js
+```
+
+Linux/macOS 示例：
+
+```bash
+TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349" \
+TURN_USERNAME="screen-room" \
+TURN_CREDENTIAL="your-turn-password" \
+node server.js
+```
+
+如果要强制所有 WebRTC 流量都走 TURN，用来验证中继是否真的可用：
+
+```bash
+ICE_TRANSPORT_POLICY=relay node server.js
+```
+
+更复杂的 ICE 配置可以用 `ICE_SERVERS_JSON`：
+
+```json
+[
+  { "urls": "stun:stun.l.google.com:19302" },
+  {
+    "urls": ["turn:turn.example.com:3478", "turns:turn.example.com:5349"],
+    "username": "screen-room",
+    "credential": "your-turn-password"
+  }
+]
+```
+
+浏览器会从 `/api/config` 读取这些配置。启用 TURN 后，如果两端可以直连，视频仍会优先直连；只有直连失败或策略设为 `relay` 时才会明显消耗 TURN 服务器带宽。
+
 ## 功能
 
 - 房主创建 6 位数字房间号
@@ -61,11 +106,12 @@ Cannot read properties of undefined (reading 'getDisplayMedia')
 - 观众加入/离开提示
 - 浏览器屏幕共享
 - WebRTC 点对点投屏
+- 可配置 STUN/TURN 中继
 - 本地预览和观看端播放器
 
 ## 开发版说明
 
 - 房间数据保存在 Node 进程内存中，重启服务会清空。
 - 屏幕捕获 API 在正式部署时需要 HTTPS，`localhost` 开发环境可直接使用。
-- 跨复杂网络访问时建议配置 TURN 服务，否则部分网络环境可能无法建立 WebRTC 连接。
+- 跨复杂网络访问时建议配置 TURN 服务，否则部分网络环境可能无法建立 WebRTC 连接；TURN 会消耗中继服务器带宽。
 - 后续正式化事项见 `TODO.md`。
